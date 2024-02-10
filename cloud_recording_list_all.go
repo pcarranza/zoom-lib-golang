@@ -6,6 +6,8 @@ const (
 	// ListAllRecordingsPath - v2 lists all recordings
 	ListAllRecordingsPath = "/users/%s/recordings"
 
+	DeleteMeetingRecordingsPath = "/meetings/%d/recordings"
+
 	// TrashTypeMeetingRecordings list all meeting recordings from the trash. Default.
 	TrashTypeMeetingRecordings TrashType = "meeting_recordings"
 	// TrashTypeRecordingFile list all individual recording files from the trash
@@ -27,9 +29,9 @@ type (
 		Mc            string `url:"mc,omitempty"`
 		Trash         bool   `url:"trash,omitempty"`
 		// From is a YYYY-MM-DD string representing a date
-		From string `url:"from"`
+		From string `url:"from,omitempty"`
 		// To is a YYYY-MM-DD string representing a date
-		To        string    `url:"to"`
+		To        string    `url:"to,omitempty"`
 		TrashType TrashType `url:"trash_type,omitempty"`
 	}
 
@@ -43,6 +45,11 @@ type (
 		NextPageToken string                  `json:"next_page_token"`
 		Meetings      []CloudRecordingMeeting `json:"meetings"`
 	}
+
+	DeleteMeetingRecordingsOptions struct {
+		MeetingID int  `url:"-"`
+		Delete    bool `url:",omitempty"` // By default it is trash, thus, on true, directly delete
+	}
 )
 
 // ListAllRecordings calls /users/{user_id}/recordings endpoint
@@ -54,6 +61,9 @@ func ListAllRecordings(opts ListAllRecordingsOptions) (ListAllRecordingsResponse
 
 // ListAllRecordings calls /users/{user_id}/recordings endpoint
 // and gets all cloud recordings for a user, using the c client
+//
+// BEWARE: if you request more than 30 days, zoom will limit the response to
+// that silently and automatically.
 func (c *Client) ListAllRecordings(opts ListAllRecordingsOptions) (ListAllRecordingsResponse, error) {
 	var ret = ListAllRecordingsResponse{}
 	return ret, c.requestV2(requestV2Opts{

@@ -1,5 +1,11 @@
 package zoom // Use this file for /recording endpoints
 
+import (
+	"fmt"
+	"io"
+	"net/http"
+)
+
 const (
 	// RecordingTypeSharedScreenWithSpeakerViewCC is a shared screen with spearker view (CC) recording
 	RecordingTypeSharedScreenWithSpeakerViewCC RecordingType = "shared_screen_with_speaker_view(CC)"
@@ -35,6 +41,7 @@ type (
 		RecordingEnd   *Time  `json:"recording_end"`
 		FileType       string `json:"file_type"`
 		FileSize       int    `json:"file_size"`
+		FileExtension  string `json:"file_extension"`
 		PlayURL        string `json:"play_url"`
 		// The URL using which the recording file can be downloaded. To access a private or
 		// password protected cloud recording, you must use a [Zoom JWT App Type]
@@ -47,14 +54,58 @@ type (
 	// CloudRecordingMeeting represents a zoom meeting object
 	CloudRecordingMeeting struct {
 		UUID           string          `json:"uuid"`
-		ID             string          `json:"id"`
+		ID             int             `json:"id"`
 		AccountID      string          `json:"account_id"`
 		HostID         string          `json:"host_id"`
 		Topic          string          `json:"topic"`
 		StartTime      *Time           `json:"start_time"`
 		Duration       int             `json:"duration"`
-		TotalSize      string          `json:"total_size"`
-		RecordingCount string          `json:"recording_count"`
+		TotalSize      int             `json:"total_size"`
+		RecordingCount int             `json:"recording_count"`
 		RecordingFiles []RecordingFile `json:"recording_files"`
 	}
 )
+
+func (c *Client) DownloadRecordingFile(rf RecordingFile, w io.Writer) error {
+	req, err := http.NewRequest("GET", rf.DownloadURL, nil)
+	if err != nil {
+		return err
+	}
+
+	req, err = c.addRequestAuth(req, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return err
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			return fmt.Errorf("could not copy response body when downloading recording file: %w", err)
+		}
+
+		if err := resp.Body.Close(); err != nil {
+			return fmt.Errorf("could not close body after copying: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("could not download recording file %s: %s", rf.ID, resp.Status)
+	}
+
+	return nil
+}
+
+// DeleteRecording calls DELETE /users/{user_id}/recordings/{recording_id}
+// and deletes a cloud recording for the given user
+func (c *Client) DeleteMeetingRecordings(opts DeleteMeetingRecordingsOptions) error {
+	return c.requestV2(requestV2Opts{
+		Method:        Delete,
+		Path:          fmt.Sprintf(DeleteMeetingRecordingsPath, opts.MeetingID),
+		URLParameters: &opts,
+		HeadResponse:  true,
+	})
+}
